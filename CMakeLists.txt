@@ -6,6 +6,9 @@ set(common_srcs "timer.cc" "utils.cc")
 set(srcs "session.cc" "connection.cc")
 
 add_library(common STATIC ${common_srcs})
-add_library(ftp STATIC ${srcs})
+#add_library(ftp STATIC ${srcs})
 
+add_executable(ftp ${srcs})
+target_compile_definitions(ftp PRIVATE CONNECTION_TEST)
+target_link_libraries(ftp common)
 
