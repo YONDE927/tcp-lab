@@ -9,42 +9,14 @@
 #include <vector>
 #include <string>
 #include <thread>
+#include <chrono>
 #include <memory>
 #include <csignal>
 
 #include "utils.h"
+#include "connection.h"
 
 namespace netobj{
-
-    class Server;
-    class ServerWorker;
-    class Client;
-
-    class Server{
-        public:
-            int server_socket{0};
-            sockaddr_in server_addr{0};
-            Server();
-            ~Server();
-            int set_host(std::string ip, short port);
-            int start_listen();
-            int stop_listen();
-            int accept_client();
-            template <class F, class ...Args>
-            int run(F session, Args&&... args);
-    };
-
-    class Client{
-        public:
-            int client_socket{0};
-            sockaddr_in client_addr{0};
-            Client();
-            ~Client();
-            int set_host(std::string ip, short port);
-            int connect_node();
-            int reconnect_node();
-    };
-
     //Server
     Server::Server(){}
 
@@ -359,6 +331,7 @@ int main(){
         std::cout << "fork fail" << std::endl;
         return -1;
     }else if(client_process == 0){
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         if(test_client_connection() < 0){
             std::cout << "[Client] test_client_connection fail" << std::endl;
         }
