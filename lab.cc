@@ -14,7 +14,10 @@ void func2(F func, Args&&... args){
 }
 
 int main(){
-    func2(func1, 3);
+    int x = 3;
+    int& y = x;
+
+    std::cout << &x << std::endl << &y << std::endl;
     return 0;
 }
 

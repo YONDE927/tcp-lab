@@ -19,92 +19,88 @@
 #include "transport.h"
 #include "utils.h"
 
+using std::vector;
+
+//構造体を送るときは値とアライメントが全て完結しているものに限る。メンバ変数にポインタが含むような構造体は送らないこと
 template<class T>
-int Transporter::send_data(shared_ptr<T> buffer, int flag){
-    int sendsize{0}, network_size{0};
+int Transporter::send_data(const T& buffer, int flag){
+    int send_size{0}, network_size{0};
 
-    network_size = htonl(sizeof(T)); 
-    sendsize = send(socket, &network_size, sizeof(int), 0);
-    if(sendsize < 0){
+    send_size = send(socket, &buffer, sizeof(T), 0);
+    if(send_size < 0){
         print_error();
         return -1;
     }
-
-    sendsize = send(socket, buffer->data(), sizeof(T), 0);
-    if(sendsize < 0){
-        print_error();
-        return -1;
-    }
-    return sendsize;
+    return send_size;
 }
 
 //配列などを送信する場合
 template<class T>
-int Transporter::send_data(shared_ptr<std::vector<T>> buffer, int flag){
-    int sendsize{0}, network_size{0};
+int Transporter::send_data(const vector<T>& buffer, int flag){
+    int send_size{0}, buffer_size{0}, network_size{0};
 
-    network_size = htonl(buffer->size()); 
-    sendsize = send(socket, &network_size, sizeof(int), 0);
-    if(sendsize < 0){
+    buffer_size = buffer.size() * sizeof(T);
+    network_size = htonl(buffer_size); 
+    send_size = send(socket, &network_size, sizeof(int), 0);
+    if(send_size < 0){
         print_error();
         return -1;
     }
 
-    sendsize = send(socket, buffer->data(), buffer->size(), 0);
-    if(sendsize < 0){
+    send_size = send(socket, buffer.data(), buffer_size, 0);
+    if(send_size < 0){
         print_error();
         return -1;
     }
-    return sendsize;
+    return send_size;
 }
 
 template<class T>
-int Transporter::recv_data(shared_ptr<T> buffer, int flag){
-    int recvsize{0}, size{0};
-    shared_ptr<Transporter::Datagram> datagram(new Transporter::Datagram);
+int Transporter::recv_data(T& buffer, int flag){
+    int recv_size{0}, buffer_size{0};
 
-    recvsize = recv(socket, &size, sizeof(int), 0);
-    if(recvsize < 0){
+    recv_size = recv(socket, &buffer, sizeof(T), 0);
+    if(recv_size < 0){
         print_error();
         return -1;
     }
-    size = ntohl(size);
-
-    recvsize = recv(socket, buffer->data(), size, 0);
-    if(recvsize < 0){
-        print_error();
-        return -1;
-    }
-    return recvsize;
+    return recv_size;
 }
 
 template<class T>
-int Transporter::recv_data(shared_ptr<vector<T>> buffer, int flag){
-    int recvsize{0}, size{0};
-    shared_ptr<Transporter::Datagram> datagram(new Transporter::Datagram);
+int Transporter::recv_data(vector<T>& buffer, int flag){
+    int recv_size{0}, buffer_size{0};
 
-    recvsize = recv(socket, &size, sizeof(int), 0);
-    if(recvsize < 0){
+    recv_size = recv(socket, &buffer_size, sizeof(int), 0);
+    if(recv_size < 0){
         print_error();
         return -1; 
     }
-    size = ntohl(size);
+    buffer_size = ntohl(buffer_size);
 
-    buffer->resize(size);
-    recvsize = recv(socket, buffer->data(), size, 0);
-    if(recvsize < 0){
+    buffer.resize(buffer_size / sizeof(T));
+    recv_size = recv(socket, buffer.data(), buffer_size, 0);
+    if(recv_size < 0){
         print_error();
         return -1; 
     }
-    return recvsize;
+    return recv_size;
 }
 
 #ifdef TRANSPORT_TEST
+struct Sample_Struct{
+    int x;
+    double y;
+    char z[256];
+};
+
 int test_simple_transport(int socket, int server_or_clinet){
     const std::string message = "Hello World";
-    std::shared_ptr<std::vector<char>> send_message(new std::vector<char>(message.begin(), message.end()));
-    std::shared_ptr<std::vector<char>> recv_message(new std::vector<char>(0));
-    int sendsize{0}, recvsize{0};
+    const Sample_Struct send_struct = {5, 10, "Hello World"};
+    Sample_Struct recv_struct;
+    std::vector<char> send_message(message.begin(), message.end());
+    std::vector<char> recv_message(0);
+    int send_size{0}, recv_size{0};
 
     if(socket <= 0){
         std::cout << "socket is invalid" << std::endl;
@@ -115,67 +111,126 @@ int test_simple_transport(int socket, int server_or_clinet){
 
     if(server_or_clinet){
         //server
-        recvsize = transporter.recv_data(recv_message, 0);
-        if(recvsize < 0){
+        recv_size = transporter.recv_data(recv_message, 0);
+        if(recv_size < 0){
             print_error();
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
-        }else if(recvsize == 0){
+        }else if(recv_size == 0){
             std::cout << "[Server] received EOF" << std::endl;
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
         }else{
-            std::cout << "[Server] received: " << recv_message->data() << std::endl;
+            std::cout << "[Server] received: " << recv_message.data() << std::endl;
         }
 
         //echo back
-        sendsize = transporter.send_data(recv_message, 0);
-        if(sendsize < 0){
+        send_size = transporter.send_data(recv_message, 0);
+        if(send_size < 0){
             print_error();
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
-        }else if(sendsize != recvsize){
+        }else if(send_size != recv_size){
             std::cout << "[Server] send not all data" << std::endl;
             return -1;
         }else{
             std::cout << "[Server] send all data" << std::endl;
-            return 0;
+        }
+
+        //recv struct
+        recv_size = transporter.recv_data(recv_struct, 0);
+        if(recv_size < 0){
+            print_error();
+            shutdown(socket, SHUT_RDWR);
+            close(socket);
+            return -1;
+        }else if(recv_size == 0){
+            std::cout << "[Server] received EOF" << std::endl;
+            shutdown(socket, SHUT_RDWR);
+            close(socket);
+            return -1;
+        }else{
+            std::cout << "[Server] received: " << recv_struct.x << recv_struct.y << recv_struct.z << std::endl;
+        }
+
+        //echo back
+        send_size = transporter.send_data(recv_struct, 0);
+        if(send_size < 0){
+            print_error();
+            shutdown(socket, SHUT_RDWR);
+            close(socket);
+            return -1;
+        }else if(send_size != sizeof(Sample_Struct)){
+            std::cout << "[Server] send not all data" << std::endl;
+            return -1;
+        }else{
+            std::cout << "[Server] send all data" << std::endl;
         }
     }else{
         //client
-        sendsize = transporter.send_data(send_message, 0);
-        if(sendsize < 0){
+        send_size = transporter.send_data(send_message, 0);
+        if(send_size < 0){
             std::cout << "[Client] send data error" << std::endl;
             print_error();
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
-        }else if(sendsize != send_message->size()){
+        }else if(send_size != send_message.size()){
+            std::cout << "[Client] send not all data char" << std::endl;
+            return -1;
+        }else{
+            std::cout << "[Client] send all data" << std::endl;
+        }
+        //recv echo
+        recv_size = transporter.recv_data(recv_message, 0); 
+        if(recv_size < 0){
+            print_error();
+            shutdown(socket, SHUT_RDWR);
+            close(socket);
+            return -1;
+        }else if(recv_size == 0){
+            std::cout << "[Client] received EOF" << std::endl;
+            shutdown(socket, SHUT_RDWR);
+            close(socket);
+            return -1;
+        }else{
+            std::cout << "[Client] received: " << recv_message.data() << std::endl;
+        }
+
+        //send struct
+        send_size = transporter.send_data(send_struct, 0);
+        if(send_size < 0){
+            std::cout << "[Client] send data error" << std::endl;
+            print_error();
+            shutdown(socket, SHUT_RDWR);
+            close(socket);
+            return -1;
+        }else if(send_size != sizeof(Sample_Struct)){
             std::cout << "[Client] send not all data" << std::endl;
             return -1;
         }else{
             std::cout << "[Client] send all data" << std::endl;
         }
         //recv echo
-        recvsize = transporter.recv_data(recv_message, 0); 
-        if(recvsize < 0){
+        recv_size = transporter.recv_data(recv_struct, 0); 
+        if(recv_size < 0){
             print_error();
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
-        }else if(recvsize == 0){
+        }else if(recv_size == 0){
             std::cout << "[Client] received EOF" << std::endl;
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
         }else{
-            std::cout << "[Client] received: " << recv_message->data() << std::endl;
-            return 0;
+            std::cout << "[Client] received: " << recv_struct.x << recv_struct.y << recv_struct.z << std::endl;
         }
     }
+    return 0;
 }
 
 int main(){
