@@ -1,6 +1,5 @@
 //C include
 #include <unistd.h>
-#include <sys/socket.h>
 #include <sys/wait.h>
 #include <arpa/inet.h>
 
@@ -17,10 +16,10 @@
 #include "connection.h"
 
 namespace netobj{
-    //Server
-    Server::Server(){}
+    //server
+    server::server(){}
 
-    Server::~Server(){
+    server::~server(){
         int rc{0};
 
         if(server_socket > 0){
@@ -33,19 +32,23 @@ namespace netobj{
         }
     }
 
-    int Server::set_host(std::string ip, short port){
+    int server::get_socket(){
+        return server_socket;
+    }
+
+    int server::set_host(std::string ip, short port){
         int rc{0};
         server_addr.sin_family = AF_INET;
         server_addr.sin_addr.s_addr = inet_addr(ip.c_str());
         if(server_addr.sin_addr.s_addr < 0){
-            std::cout << "[Server] invalid ip" << std::endl;
+            std::cout << "[server] invalid ip" << std::endl;
             return -1;
         }
         server_addr.sin_port = htons(port);
         return 0;
     }
 
-    int Server::start_listen(){
+    int server::start_listen(){
         int rc{0};
         int yes{1};
 
@@ -75,7 +78,7 @@ namespace netobj{
         return server_socket;
     }
 
-    int Server::stop_listen(){
+    int server::stop_listen(){
         if(server_socket > 0){
             if(shutdown(server_socket, SHUT_RDWR) < 0){
                 print_error();
@@ -88,7 +91,7 @@ namespace netobj{
         return 0;
     }
 
-    int Server::accept_client(){
+    int server::accept_client(){
         int client_socket{0};
         sockaddr_in client_addr{0};
         char ip[INET_ADDRSTRLEN] = {0};
@@ -104,15 +107,15 @@ namespace netobj{
 
         char str[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &client_addr.sin_addr, str, INET_ADDRSTRLEN);
-        std::cout << "[Server] accept ip " << str << " accept port " << client_addr.sin_port << std::endl;
+        std::cout << "[server] accept ip " << str << " accept port " << client_addr.sin_port << std::endl;
         return client_socket;
     }
 
-    template <class F, class ...Args>
-    int Server::run(F session, Args&&... args){
+    template <class WORKER_FUNC, class ...Args>
+    int server::run(WORKER_FUNC runner, Args&&... args){
         if(server_socket <= 0){
-            std::cout << "[Server] server begin listening" << std::endl;
-            if(Server::start_listen() < 0){
+            std::cout << "[server] server begin listening" << std::endl;
+            if(server::start_listen() < 0){
                 return -1;
             }
         }
@@ -120,11 +123,11 @@ namespace netobj{
         while(1){
             int client_socket = this->accept_client();
             if(client_socket <= 0){
-                std::cout << "[Server] accept_client() error" << std::endl;
+                std::cout << "[server] accept_client() error" << std::endl;
                 continue;
             }
             try{
-                std::thread session_thread(session, client_socket, args...);
+                std::thread session_thread(runner, client_socket, args...);
                 session_thread.detach();
             }catch(std::system_error &e){
                 std::cout << e.what() << std::endl;
@@ -135,10 +138,22 @@ namespace netobj{
         return 0;
     }
 
-    //Client
-    Client::Client(){}
+    //server_worker
+    server_worker::server_worker(int _socket){
+        server_socket = _socket;
+    }
 
-    Client::~Client(){
+    server_worker::~server_worker(){
+        if(server_socket != 0){
+            shutdown(server_socket, SHUT_RDWR);
+            close(server_socket);
+        }
+    }
+
+    //client
+    client::client(){}
+
+    client::~client(){
         if(client_socket > 0){
             if(shutdown(client_socket, SHUT_RDWR) < 0){
                 print_error();
@@ -149,45 +164,51 @@ namespace netobj{
         }
     }
 
-    int Client::set_host(std::string ip, short port){
+    int client::get_socket(){
+        return client_socket;
+    }
+
+    int client::set_host(std::string ip, short port){
         int rc{0};
         client_addr.sin_family = AF_INET;
         client_addr.sin_addr.s_addr = inet_addr(ip.c_str());
         if(client_addr.sin_addr.s_addr < 0){
-            std::cout << "[Client] invalid ip" << std::endl;
+            std::cout << "[client] invalid ip" << std::endl;
             return -1;
         }
         client_addr.sin_port = htons(port);
         return 0;
     }
 
-    int Client::connect_node(){
+    int client::connect_server(){
         int yes{1};
         socklen_t socklen{sizeof(sockaddr_in)};
 
         client_socket = socket(AF_INET, SOCK_STREAM, 0);
         if(client_socket < 0){
-            std::cout << "[Client] socket error" << std::endl;
+            std::cout << "[client] socket error" << std::endl;
             print_error();
             return -1;
         }
 
         if(setsockopt(client_socket, SOL_SOCKET, SO_REUSEADDR, (const char *)&yes, sizeof(yes)) < 0){
-            std::cout << "[Client] socket option error" << std::endl;
+            std::cout << "[client] socket option error" << std::endl;
             print_error();
             return -1;
         }
         
         if(connect(client_socket, (struct sockaddr*)&client_addr, sizeof(sockaddr_in)) < 0){
-            std::cout << "[Client] connet error" << std::endl;
+            std::cout << "[client] connet error" << std::endl;
             print_error();
             return -1;
         }
 
+        transporter.set_socket(client_socket);
+
         return client_socket;
     }
 
-    int Client::reconnect_node(){
+    int client::reconnect_server(){
         if(client_socket > 0){
             if(shutdown(client_socket, SHUT_RDWR) < 0){
                 print_error();
@@ -199,7 +220,7 @@ namespace netobj{
             }
         }
         client_socket = 0;
-        return this->connect_node();
+        return this->connect_server();
     }
 };
 
@@ -222,12 +243,12 @@ int test_simple_session(int socket, int server_or_clinet){
             close(socket);
             return -1;
         }else if(recvsize == 0){
-            std::cout << "[Server] received EOF" << std::endl;
+            std::cout << "[server] received EOF" << std::endl;
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
         }else{
-            std::cout << "[Server] received: " << recv_message.data() << std::endl;
+            std::cout << "[server] received: " << recv_message.data() << std::endl;
         }
 
         //echo back
@@ -238,26 +259,26 @@ int test_simple_session(int socket, int server_or_clinet){
             close(socket);
             return -1;
         }else if(sendsize != recvsize){
-            std::cout << "[Server] send not all data" << std::endl;
+            std::cout << "[server] send not all data" << std::endl;
             return -1;
         }else{
-            std::cout << "[Server] send all data" << std::endl;
+            std::cout << "[server] send all data" << std::endl;
             return 0;
         }
     }else{
         //client
         sendsize = send(socket, send_message.data(), recv_message.size() + 1, 0);
         if(sendsize < 0){
-            std::cout << "[Client] send data error" << std::endl;
+            std::cout << "[client] send data error" << std::endl;
             print_error();
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
         }else if(sendsize != recv_message.size() + 1){
-            std::cout << "[Client] send not all data" << std::endl;
+            std::cout << "[client] send not all data" << std::endl;
             return -1;
         }else{
-            std::cout << "[Client] send all data" << std::endl;
+            std::cout << "[client] send all data" << std::endl;
         }
         //recv echo
         recvsize = recv(socket, recv_message.data(), recv_message.size() + 1, 0);
@@ -267,44 +288,44 @@ int test_simple_session(int socket, int server_or_clinet){
             close(socket);
             return -1;
         }else if(recvsize == 0){
-            std::cout << "[Client] received EOF" << std::endl;
+            std::cout << "[client] received EOF" << std::endl;
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
         }else{
-            std::cout << "[Client] received: " << recv_message.data() << std::endl;
+            std::cout << "[client] received: " << recv_message.data() << std::endl;
             return 0;
         }
     }
 }
 
 int test_server_connection(){
-    netobj::Server server; 
+    netobj::server server; 
     if(server.set_host("127.0.0.1", 8080) < 0){
-        std::cout << "[Server] set_host error" << std::endl;
+        std::cout << "[server] set_host error" << std::endl;
     }
     if(server.run(test_simple_session, 1) < 0){
-        std::cout << "[Server] run error" << std::endl;
+        std::cout << "[server] run error" << std::endl;
     }
     return 0;
 }
 
 int test_client_connection(){
     int rc{0};
-    netobj::Client client; 
+    netobj::client client; 
 
     if(client.set_host("127.0.0.1", 8080) < 0){
-        std::cout << "[Client] set_host error" << std::endl;
+        std::cout << "[client] set_host error" << std::endl;
         return -1;
     }
 
-    if(client.connect_node() < 0){
-        std::cout << "[Client] connect_node error" << std::endl;
+    if(client.connect_server() < 0){
+        std::cout << "[client] connect_node error" << std::endl;
         return -1;
     }
 
-    if(test_simple_session(client.client_socket, 0) < 0){
-        std::cout << "[Client] test_simple_session error" << std::endl;
+    if(test_simple_session(client.get_socket(), 0) < 0){
+        std::cout << "[client] test_simple_session error" << std::endl;
         return -1;
     }
     return 0; 
@@ -321,7 +342,7 @@ int main(){
         return -1;
     }else if(server_process == 0){
         if(test_server_connection() < 0){
-            std::cout << "[Server] test_server_connection fail" << std::endl;
+            std::cout << "[server] test_server_connection fail" << std::endl;
         }
         return 0;
     }
@@ -333,7 +354,7 @@ int main(){
     }else if(client_process == 0){
         std::this_thread::sleep_for(std::chrono::seconds(1));
         if(test_client_connection() < 0){
-            std::cout << "[Client] test_client_connection fail" << std::endl;
+            std::cout << "[client] test_client_connection fail" << std::endl;
         }
         return 0;
     }

@@ -24,7 +24,8 @@ namespace transport{
         private:
             int socket;
         public:
-            Transporter(int _socket):socket(_socket){};
+            Transporter();
+            void set_socket(int socket);
             template<class T>
             int send_data(const T& buffer, int flag);
             template<class T>

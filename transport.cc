@@ -15,13 +15,16 @@
 #include <cerrno>
 #include <csignal>
 
-#include "connection.h"
 #include "transport.h"
 #include "utils.h"
 
 using std::vector;
 
 namespace transport{
+    void Transporter::set_socket(int _socket){
+        socket = _socket;
+    }
+
     template<class T>
     int Transporter::send_data(const T& buffer, int flag){
         int send_size{0}, network_size{0};
@@ -89,6 +92,7 @@ namespace transport{
 }
 
 #ifdef TRANSPORT_TEST
+#include "connection.h"
 struct Sample_Struct{
     int x;
     double y;
