@@ -1,95 +1,8 @@
-//include C library
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <arpa/inet.h>
-#include <strings.h>
-#include <unistd.h>
-
-//include C++ library
-#include <iostream>
-#include <vector>
-#include <memory>
-#include <system_error>
+#include "transport.h"
 #include <thread>
 #include <chrono>
-#include <cerrno>
 #include <csignal>
-
-#include "transport.h"
-#include "utils.h"
-
-using std::vector;
-
-namespace transport{
-    void Transporter::set_socket(int _socket){
-        socket = _socket;
-    }
-
-    template<class T>
-    int Transporter::send_data(const T& buffer, int flag){
-        int send_size{0}, network_size{0};
-
-        send_size = send(socket, &buffer, sizeof(T), 0);
-        if(send_size < 0){
-            print_error();
-            return -1;
-        }
-        return send_size;
-    }
-
-    //配列などを送信する場合
-    template<class T>
-    int Transporter::send_data(const vector<T>& buffer, int flag){
-        int send_size{0}, buffer_size{0}, network_size{0};
-
-        buffer_size = buffer.size() * sizeof(T);
-        network_size = htonl(buffer_size); 
-        send_size = send(socket, &network_size, sizeof(int), 0);
-        if(send_size < 0){
-        print_error();
-        return -1;
-    }
-
-    send_size = send(socket, buffer.data(), buffer_size, 0);
-    if(send_size < 0){
-        print_error();
-        return -1;
-    }
-    return send_size;
-    }
-
-    template<class T>
-    int Transporter::recv_data(T& buffer, int flag){
-        int recv_size{0}, buffer_size{0};
-
-        recv_size = recv(socket, &buffer, sizeof(T), 0);
-        if(recv_size < 0){
-            print_error();
-            return -1;
-        }
-        return recv_size;
-    }
-
-    template<class T>
-    int Transporter::recv_data(vector<T>& buffer, int flag){
-        int recv_size{0}, buffer_size{0};
-
-        recv_size = recv(socket, &buffer_size, sizeof(int), 0);
-        if(recv_size < 0){
-            print_error();
-            return -1; 
-        }
-        buffer_size = ntohl(buffer_size);
-
-        buffer.resize(buffer_size / sizeof(T));
-        recv_size = recv(socket, buffer.data(), buffer_size, 0);
-        if(recv_size < 0){
-            print_error();
-            return -1; 
-        }
-        return recv_size;
-    }
-}
+#include <sys/wait.h>
 
 #ifdef TRANSPORT_TEST
 #include "connection.h"
@@ -118,7 +31,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         //server
         recv_size = transporter.recv_data(recv_message, 0);
         if(recv_size < 0){
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -134,7 +47,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         //echo back
         send_size = transporter.send_data(recv_message, 0);
         if(send_size < 0){
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -148,7 +61,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         //recv struct
         recv_size = transporter.recv_data(recv_struct, 0);
         if(recv_size < 0){
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -164,7 +77,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         //echo back
         send_size = transporter.send_data(recv_struct, 0);
         if(send_size < 0){
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -179,7 +92,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         send_size = transporter.send_data(send_message, 0);
         if(send_size < 0){
             std::cout << "[Client] send data error" << std::endl;
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -192,7 +105,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         //recv echo
         recv_size = transporter.recv_data(recv_message, 0); 
         if(recv_size < 0){
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -209,7 +122,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         send_size = transporter.send_data(send_struct, 0);
         if(send_size < 0){
             std::cout << "[Client] send data error" << std::endl;
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;
@@ -222,7 +135,7 @@ int test_simple_transport(int socket, int server_or_clinet){
         //recv echo
         recv_size = transporter.recv_data(recv_struct, 0); 
         if(recv_size < 0){
-            print_error();
+            print_error(__func__);
             shutdown(socket, SHUT_RDWR);
             close(socket);
             return -1;

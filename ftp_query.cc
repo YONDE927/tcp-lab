@@ -4,6 +4,12 @@
 #include "ftp_query.h"
 
 namespace ftp{
+    void print_stat(struct stat& attr){
+        std::cout << attr.st_size << " "
+        << attr.st_size << " " 
+        << attr.st_uid << " " 
+        << attr.st_mtime << std::endl;
+    }
     void htonstat(struct stat& attr){
         attr.st_size = htobe32(attr.st_size);
         attr.st_mode = htobe32(attr.st_mode);

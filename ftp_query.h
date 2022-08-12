@@ -9,6 +9,8 @@
 #include <cerrno>
 
 namespace ftp{
+    void print_stat(struct stat& attr);
+
     enum op_code{
         NONE,
         ATTR,
@@ -89,3 +91,4 @@ namespace ftp{
         void hton();
     };
 }
+

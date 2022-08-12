@@ -1,3 +1,4 @@
+#pragma once
 //C include
 #include <sys/stat.h>
 
@@ -9,7 +10,7 @@
 #include "connection.h"
 
 namespace ftp{
-    class ftp_client: protected netobj::client{
+    class ftp_client: public netobj::client{
         public:
             ftp_client();
             ~ftp_client();
@@ -21,17 +22,16 @@ namespace ftp{
             int ftp_client_write(int fd, int offset, int size, const std::vector<char>& buffer);
     };
 
-    class ftp_server_worker: protected netobj::server_worker{
+    class ftp_server: public netobj::server{
         private:
-            ftp_server_worker(int socket);
+            ftp_server(int socket);
         public:
-            ~ftp_server_worker();
-            void run();
-            int ftp_server_attr(struct attr_query& query);
-            int ftp_server_readdir(struct readdir_query& query);
-            int ftp_server_open(struct open_query& query);
-            int ftp_server_close(struct close_query& query);
-            int ftp_server_read(struct read_query& query);
-            int ftp_server_write(struct write_query& query);
+            static void run(int socket);
+            int ftp_server_attr();
+            int ftp_server_readdir();
+            int ftp_server_open();
+            int ftp_server_close();
+            int ftp_server_read();
+            int ftp_server_write();
     };
 }

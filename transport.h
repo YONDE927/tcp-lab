@@ -12,8 +12,21 @@
 //これはソケット上のデータ通信を簡略するのみであり、ソケットエラーは呼び出し側で処理することを想定している。
 
 #pragma once
-#include <memory>
+//include C library
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <strings.h>
+#include <unistd.h>
+
+//include C++ library
+#include <iostream>
 #include <vector>
+#include <memory>
+#include <system_error>
+#include <cerrno>
+
+#include "transport.h"
+#include "utils.h"
 
 using std::vector;
 
@@ -24,15 +37,74 @@ namespace transport{
         private:
             int socket;
         public:
-            Transporter();
-            void set_socket(int socket);
+            Transporter(){};
+
+            void set_socket(int _socket){
+                socket = _socket;
+            }
+
             template<class T>
-            int send_data(const T& buffer, int flag);
+            int send_data(const T& buffer, int flag){
+                int send_size{0}, network_size{0};
+
+                send_size = send(socket, &buffer, sizeof(T), 0);
+                if(send_size < 0){
+                    print_error(__func__);
+                    return -1;
+                }
+                return send_size;
+            }
+
             template<class T>
-            int send_data(const vector<T>& buffer, int flag);
+            int send_data(const vector<T>& buffer, int flag){
+                int send_size{0}, buffer_size{0}, network_size{0};
+
+                buffer_size = buffer.size() * sizeof(T);
+                network_size = htonl(buffer_size); 
+                send_size = send(socket, &network_size, sizeof(int), 0);
+                if(send_size < 0){
+                    print_error(__func__);
+                    return -1;
+                }
+
+                send_size = send(socket, buffer.data(), buffer_size, 0);
+                if(send_size < 0){
+                    print_error(__func__);
+                    return -1;
+                }
+            }
+
             template<class T>
-            int recv_data(T& buffer, int flag);
+            int recv_data(T& buffer, int flag){
+                int recv_size{0}, buffer_size{0};
+
+                recv_size = recv(socket, &buffer, sizeof(T), 0);
+                if(recv_size < 0){
+                    print_error(__func__);
+                    return -1;
+                }
+                return recv_size;
+            }
+
             template<class T>
-            int recv_data(vector<T>& buffer, int flag);
+            int recv_data(vector<T>& buffer, int flag){
+                int recv_size{0}, buffer_size{0};
+
+                recv_size = recv(socket, &buffer_size, sizeof(int), 0);
+                if(recv_size < 0){
+                    print_error(__func__);
+                    return -1; 
+                }
+                buffer_size = ntohl(buffer_size);
+
+                buffer.resize(buffer_size / sizeof(T));
+                recv_size = recv(socket, buffer.data(), buffer_size, 0);
+                if(recv_size < 0){
+                    print_error(__func__);
+                    return -1; 
+                }
+
+                return recv_size;
+            }
     };
 }
